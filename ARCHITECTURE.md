@@ -40,7 +40,7 @@
 | 层 | 选择 | 理由 |
 |----|------|------|
 | 后端 / agent 编排 | **Python + FastAPI** | 团队主力语言；LLM 生态最厚；EDA 数据处理（网表/波形/报告）生态压倒性领先；agent 逻辑迭代快 |
-| LLM | **Claude（Anthropic API）** | Opus 4.8 做主编排；轻量步骤可用 Haiku 降本 |
+| LLM | **多 provider，用户可选**（见 §4.5） | 支持 Anthropic(Opus/Sonnet/Haiku) / OpenAI(GPT) / DeepSeek；用户在界面选模型 |
 | Agent → 工具协议 | **MCP（Model Context Protocol）** | 工具定义清晰、可移植；sandbox 内跑一个 MCP server 暴露 EDA 工具 |
 | 前端 | **React + TypeScript** | 业界常规；桌面 app 可复用；chat UI 模板成熟 |
 | 前后端通道 | **WebSocket（主）+ REST（辅）** | agent 多步长任务需流式推送中间状态；REST 处理 CRUD/上传下载 |
@@ -115,6 +115,35 @@
 设计电路网表 → run_spice(前仿) → draw_layout(mylayout)
 → run_drc → run_lvs → run_pex → run_postsim → 打包产物供下载
 ```
+
+## 4.5 多模型支持（LLM Provider 抽象层）
+
+用户可在界面选择模型（GPT / DeepSeek / Claude Opus 等）。后端通过一层
+**Provider 抽象**屏蔽各家差异，agent 编排循环只面对一套统一接口。
+
+```
+        agent 编排循环
+              │  统一接口: chat(messages, tools) → {text | tool_calls}
+              ▼
+   ┌──────── LLM Provider 抽象层 ────────────┐
+   │  AnthropicProvider  (Opus / Sonnet / Haiku) │
+   │  OpenAIProvider     (GPT-4o / GPT-4o-mini)  │
+   │  DeepSeekProvider   (deepseek-chat / R1)    │
+   └────────────────────────────────────────────┘
+```
+
+**核心难点**：各家 tool-calling（函数调用）格式不同——
+- Anthropic：`tool_use` / `tool_result` 块
+- OpenAI：`tool_calls` / `function`
+- DeepSeek：兼容 OpenAI 格式
+
+抽象层负责把这些差异**规范化为一套统一的消息/工具格式**，使切换模型时
+agent 逻辑零改动。
+
+**要点**：
+- 每个 provider 的 API key 在后端配置，前端永不接触。
+- 不同模型工具调用可靠性/成本不同（编排类任务 Opus/GPT-4o 较稳，DeepSeek 成本低）。
+- 抽象层是后端核心模块之一，需可插拔以便后续接入新 provider。
 
 ### 工具集（MCP tools，初版）
 
