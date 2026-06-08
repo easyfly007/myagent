@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "circuit-optimizer"
+version = "0.0.1"
+description = "Constrained multi-objective circuit parameter optimizer (pluggable engines)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+]
+
+# 各引擎依赖按需安装 —— 接口可插拔，只装你用的那个
+[project.optional-dependencies]
+bayesian = ["ax-platform>=0.3"]      # 默认引擎：贝叶斯 constrained MOBO
+evolutionary = ["nevergrad>=1.0"]    # CMA-ES / DE
+nsga = ["pymoo>=0.6"]                # NSGA-II 多目标进化
+dev = ["pytest"]
+
+# run_optimizer 工具入口：agent 通过它调用优化器
+[project.scripts]
+run_optimizer = "circuit_optimizer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["circuit_optimizer*"]
