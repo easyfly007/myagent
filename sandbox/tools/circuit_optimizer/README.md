@@ -34,6 +34,27 @@ circuit_optimizer/
 └── cli.py         # run_optimizer 工具入口（读 spec JSON → 写 result JSON）
 ```
 
+## Evaluator 设计（rustspice 接口已确认）
+
+evaluator 是优化器**唯一**与仿真器耦合的地方，只有两个窄接口，目标仿真器 = 自研 rustspice：
+
+```
+engine.ask() → {W1:8u, L1:0.5u, Ibias:50u}
+   ① 参数注入：重写 deck 的 .param 块（rustspice 支持 .param，
+                器件用 W={W1} 引用；每轮只改 param 块，网表不动）
+   ② 组 deck = 网表 + testbench(.meas) → 写 deck_file
+   ③ 跑 rustspice 命令（spec.simulation.command）
+   ④ 读测量：rustspice .meas 输出结构化结果（JSON/CSV），直接读，无需脆弱文本解析
+        → metrics = {gain:38.2, pm:62, power:0.9m}
+engine.tell(params, metrics)
+   · objectives = metrics[obj.metric]
+   · constraints 可行性 = compare(metrics[c.metric], c.op, c.value)
+```
+
+> 自循环：ask→注入→rustspice→读测量→tell 全在沙箱内、全靠 rustspice。
+> 因 rustspice 自研，两个接口都做到最干净：`.param` 覆盖参数 + `.meas` 结构化输出。
+> 关键约束：testbench 的 `.meas` 名必须与 objective/constraint 的 metric 名对齐（§4.7）。
+
 ## 编排循环（引擎无关）
 
 ```python
@@ -63,7 +84,7 @@ pip install -e ".[nsga]"         # + pymoo
 
 1. `spec.py` / `result.py` —— 数据模型（已搭骨架，可序列化）
 2. `engines/base.py` —— 抽象接口（已定）
-3. `evaluator.py` —— 接 rustspice + `.meas` 解析（待 rustspice 调用方式确认）
+3. `evaluator.py` —— `.param` 注入 + 跑 rustspice + 读结构化 `.meas`（接口已确认，见上）
 4. `engines/bayesian_ax.py` —— 默认引擎，constrained MOBO
 5. `optimizer.py` + `cli.py` —— 串起来，跑通单引擎端到端
 6. `engines/evolutionary.py` / `nsga.py` —— 补其他引擎
