@@ -468,6 +468,46 @@ agent 循环 await job 完成，拿结果继续
 
 ---
 
+## 6.7 设计状态 & 版本管理
+
+迭代设计天然需要版本：用户要「对比改前改后」「回退到通过 LVS 的版本」「分支试两个拓扑」。
+
+**设计状态** = sandbox workspace 全部产物（网表、sizing 参数、testbench、版图/GDS、
+报告、仿真结果）+ 元数据（用哪个 spec、达到的指标）。
+
+### 底座：git-backed workspace
+
+sandbox workspace 做成 **git 仓库**——diff / 回退 / 分支全是现成的，产物是文件天生适配。
+
+**commit 粒度 = 两者结合**：
+- agent 在关键节点**自动 commit**（带描述性 message）：网表生成 / 优化器收敛
+  (gain 38→41dB) / 版图完成 / DRC 通过 / LVS match。
+- 用户可随时**手动打命名 checkpoint**。
+
+层次区分（互补）：
+- 优化器的 eval history（params→metrics 上百条）= **sizing 维度**细粒度记录（在优化器 result 里）。
+- git workspace 版本 = **整个设计**（拓扑+sizing+版图）粗粒度里程碑。
+
+### 难点：layout 怎么 git（按需求拆）
+
+| 需求 | 方案 |
+|------|------|
+| 回退/分支/历史 | git 存二进制 GDS 即可（checkout/revert 都对）；文件大用 **Git LFS** 或 GDS 入对象存储、git 存指针 |
+| 有意义的 diff | **版本化版图的「源/配方」而非二进制 GDS**（像 version 源码而非二进制）：mylayout 脚本/参数、或 magic `.mag`（ASCII，可直接 diff） |
+| 人眼对比 | 每版渲染 layout.png，工作区并排看「版本A vs 版本B」 |
+
+```
+git workspace:
+  · 版图源/配方(mylayout 脚本 / .mag 文本) → 文本可 diff，主版本对象
+  · GDS 输出                                → 构建产物，git-LFS / 对象存储
+  · 每版 layout.png                         → 工作区并排人眼对比
+```
+
+> **开放依赖**：layout 走「版图源」干净路 vs「二进制+图片对比」退化路，取决于 mylayout
+> 是程序化生成还是手工/二进制输出 —— **待查 mylayout**，与 §9 第一层第 3 点（版图自动化）联动。
+
+---
+
 ## 7. 安全边界小结
 
 - **沙箱无出网**：不可信代码进不了外网；LLM API 调用只在后端发生。
@@ -509,8 +549,9 @@ agent 循环 await job 完成，拿结果继续
 4. ✅ **异步任务模型** —— 已定，见 §6.6（会话=服务端常驻 actor + append-only
    事件日志；会话/agent 与连接解耦；长工具=沙箱 job，归会话不归连接、可取消；
    断线重连从 last_seen 重放；MVP 内存为主+job 续跑，预留可插拔持久化）。
-5. **设计状态 & 版本管理** —— 改参重跑后旧网表/旧波形是否保留？支持对比/回退？
-   迭代设计天然需要项目文件的版本快照。
+5. ✅ **设计状态 & 版本管理** —— 已定，见 §6.7（git-backed workspace；自动 commit
+   关键节点 + 用户手动 checkpoint）。**遗留**：layout 版本化策略取决于 mylayout 工作方式
+   （程序化「版图源」干净路 vs 二进制 GDS+图片对比），待查 mylayout。
 6. **数据持久化模型** —— DB 存什么（用户/会话/消息/产物元数据）vs 文件系统存什么
    （`/workspace`）？需要一套 schema。
 7. **Sandbox 生命周期细节** —— 冷启动延迟、池化预热、空闲回收、workspace 跨重连持久化。
