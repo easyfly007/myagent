@@ -565,6 +565,30 @@ git workspace:
 12. **产物存储** —— 本地卷 vs 对象存储（S3 兼容）。
 13. **多模型差异** —— 各 provider 工具调用可靠性/成本差异、key 管理、默认模型策略。
 
+### 第四层：实现细节（讨论中浮现，动手写代码前敲定）
+
+B1. **MCP 工具契约** —— 每个工具（write_netlist/run_spice/run_drc…）精确的入参/出参
+    schema、错误约定。现仅有工具清单（§4），run_optimizer 已定一半（§4.6.4）。
+B2. **后端↔沙箱通信协议** —— RPC/MCP 传输；job 提交/取消；进度回报通道。
+B3. **事件日志完整事件类型** —— §6 草拟了几个（text_delta/tool_start/…），需定全。
+B4. **LLM provider 抽象层统一消息/工具格式** —— 规范化 schema、流式、各家 tool-calling
+    差异映射（§4.5 给了框架，未到 schema 级）。
+B5. **agent 系统提示 + 编排策略** —— 怎么决定流程、工具失败重试、设计循环推理逻辑。
+B6. **模板库格式** —— 网表 + 端口角色元数据 + 变量边界怎么存（§4.6.2 / templates/）。
+B7. **测量库格式** —— `.meas` 积木参数化与组装（§4.7 / sandbox/tools/testbench/）。
+B8. **优化器剩余实现** —— 各引擎适配（Ax MOBO 采集函数/约束/并行/停止准则）、
+    `.param` 注入格式、`.meas` JSON schema。**卡：需 rustspice 命令行格式 + `.meas` JSON 样例。**
+B9. **B2 gm/Id 初值方法** —— 实现细节，**卡：需 PDK 器件特性数据**。
+B10. **错误 / 恢复 UX** —— 仿真不收敛 / DRC 上千错误 / 工具崩溃，agent 与界面怎么处理。
+B11. **鉴权 / 用户注册实现**（M4）—— 认证方式、会话-用户绑定。
+
+**建议顺序**：
+- 可立刻推进（后端骨架地基，不卡外部依赖）：B1 / B2 / B3 / 第二层⑥⑦⑧。
+- 卡在查证：第一层③（查 mylayout）、B8（rustspice 命令+`.meas` 样例）、B9（PDK 器件数据）。
+- 可暂缓：第三层（成本/可观测性/导出/存储/多模型差异）。
+
 ### 待确认的环境事实
 
 - rustspice / mylayout 的安装路径、调用方式、PDK_ROOT？（当前 PATH 仅探测到 magic/klayout/ngspice）
+- rustspice 已确认支持 `.param`（参数注入）+ 结构化 `.meas` 输出（JSON/CSV）；
+  仍需具体命令行格式与 `.meas` JSON schema 样例（B8 依赖）。
